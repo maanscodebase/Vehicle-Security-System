@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1040598947294",
+    "project_id": "smart-car-security-33f7a",
+    "storage_bucket": "smart-car-security-33f7a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040598947294:android:a12869ade11b9eeec2b94f",
+        "android_client_info": {
+          "package_name": "com.example.smartcarsecurity"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCSZ2P-VUtcroeDEcvsAaQFntwXTGIh5sY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

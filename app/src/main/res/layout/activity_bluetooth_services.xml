@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- App Logo -->
+    <ImageView
+        android:id="@+id/logoImage"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center"
+        android:layout_marginTop="10dp"
+        android:contentDescription="App Logo"
+        android:src="@drawable/logo" />
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/tvEngineAccess"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="16dp"
+        android:text="ENGINE OFF"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <!-- Engine Access Button -->
+    <ImageButton
+        android:id="@+id/btnEngineAccess"
+        android:layout_width="70dp"
+        android:layout_height="70dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/rounded_button"
+        android:contentDescription="Engine Access Button"
+        android:scaleType="fitCenter"
+        android:src="@drawable/button_power_off" />
+
+    <!-- Location Access Button -->
+    <ImageButton
+        android:id="@+id/btnLocation"
+        android:layout_width="70dp"
+        android:layout_height="70dp"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/rounded_button"
+        android:contentDescription="Location Access Button"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_location" />
+
+    <!-- Bluetooth Status Messages -->
+    <TextView
+        android:id="@+id/tvBluetoothStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:gravity="center"
+        android:text="Waiting for connection..."
+        android:textSize="16sp"
+        android:textColor="@color/black"
+        android:padding="16dp"
+        android:background="@drawable/rounded_text_background"
+        android:maxLines="3"
+        android:ellipsize="end" />
+
+</LinearLayout>

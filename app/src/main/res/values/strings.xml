@@ -1,0 +1,17 @@
+<resources>
+    <string name="btn_register">Register</string>
+    <string name="already_have_account">Already have an account? Login</string>
+    <string name="title_activity_login">Login</string>
+    <string name="app_name">Smart Car Security</string>
+    <string name="app_logo_desc">App Logo</string>
+    <string name="hint_email">Email (@gmail.com)</string>
+    <string name="hint_password">Password</string>
+    <string name="btn_login">Login</string>
+    <string name="dont_have_account">Don\'t have an account? Register</string>
+    <string name="toggle_password">Toggle Password Visibility</string>
+    <string name="hint_confirm_password">Confirm Password</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="title_activity_maps">MapsActivity</string> <!-- Add this -->
+
+
+</resources>

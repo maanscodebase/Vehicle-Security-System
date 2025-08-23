@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <ImageView
+        android:id="@+id/logoImage"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_marginTop="40dp"
+        android:src="@drawable/logo"
+        android:layout_gravity="center"
+        android:contentDescription="App Logo"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="Connect to Car via Bluetooth"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_gravity="center_horizontal"
+        android:paddingBottom="20dp"/>
+
+    <EditText
+        android:id="@+id/etCarName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:hint="Enter Car Name"
+        android:minHeight="48dp" />
+    <Button
+        android:id="@+id/btnRegisterFingerprint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Add  Fingerprint"
+        android:textAllCaps="false"
+        android:layout_marginTop="20dp"/>
+    <TextView
+        android:id="@+id/tvFingerprintStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Fingerprint: not registered"
+        android:layout_marginTop="8dp" />
+
+    <Button
+        android:id="@+id/btnPairCar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Pair Car via Bluetooth"
+        android:textAllCaps="false"
+        android:layout_marginTop="20dp"/>
+</LinearLayout>
