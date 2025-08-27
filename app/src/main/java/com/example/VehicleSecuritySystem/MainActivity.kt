@@ -1,4 +1,4 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
@@ -10,13 +10,16 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.*
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.auth.FirebaseAuth
 import java.util.concurrent.Executor
 
 class MainActivity : AppCompatActivity() {
@@ -26,9 +29,11 @@ class MainActivity : AppCompatActivity() {
     private val pairedDevicesList = mutableListOf<String>()
     private val permissionRequestCode = 101
     private lateinit var executor: Executor
-    private lateinit var bluetoothAdapter: BluetoothAdapter
+    private var bluetoothAdapter: BluetoothAdapter? = null
     private var pendingDeviceAddress: String? = null
-    private var lastClickedPosition: Int? = null // Store last clicked position
+    private var lastClickedPosition: Int? = null
+
+    private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +43,8 @@ class MainActivity : AppCompatActivity() {
 
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
+
+        auth = FirebaseAuth.getInstance()
 
         initializeViews()
         setupClickListeners()
@@ -49,8 +56,48 @@ class MainActivity : AppCompatActivity() {
 
         executor = ContextCompat.getMainExecutor(this)
 
+        // Register for bond-state changes
         val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         registerReceiver(bondStateReceiver, filter)
+
+        // If device has no Bluetooth, inform and exit gracefully
+        if (bluetoothAdapter == null) {
+            AlertDialog.Builder(this)
+                .setTitle("Bluetooth unavailable")
+                .setMessage("This device does not support Bluetooth.")
+                .setPositiveButton("OK") { _, _ -> finish() }
+                .setCancelable(false)
+                .show()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val user = auth.currentUser
+        if (user == null) {
+            forceLogout("Your account has been removed. Please contact support.")
+        } else {
+            user.reload().addOnCompleteListener {
+                if (!it.isSuccessful || !user.isEmailVerified) {
+                    forceLogout("Please verify your email before using the app.")
+                }
+            }
+        }
+    }
+
+    private fun forceLogout(message: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Access Restricted")
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton("OK") { _, _ ->
+                auth.signOut()
+                val intent = Intent(this, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+            }
+            .show()
     }
 
     private fun initializeViews() {
@@ -65,7 +112,7 @@ class MainActivity : AppCompatActivity() {
 
         listView.onItemClickListener =
             AdapterView.OnItemClickListener { _, _, position, _ ->
-                lastClickedPosition = position // Store the clicked position
+                lastClickedPosition = position
                 if (hasBluetoothPermissions()) {
                     handleDeviceClick(position)
                 } else {
@@ -126,7 +173,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showRenameDialog(position: Int) {
-        val currentName = pairedDevicesList[position].split("|")[0]
+        val currentName = pairedDevicesList[position].split("|").firstOrNull().orEmpty()
         val input = EditText(this).apply { setText(currentName) }
 
         AlertDialog.Builder(this).apply {
@@ -145,7 +192,7 @@ class MainActivity : AppCompatActivity() {
         val devices =
             sharedPrefs.getStringSet("paired_devices", mutableSetOf())?.toMutableSet()
                 ?: mutableSetOf()
-        val entryToRemove = pairedDevicesList[position]
+        val entryToRemove = pairedDevicesList.getOrNull(position) ?: return
 
         with(sharedPrefs.edit()) {
             devices.remove(entryToRemove)
@@ -162,12 +209,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val oldEntry = pairedDevicesList.getOrNull(position) ?: return
+        val parts = oldEntry.split("|", limit = 3)
+        val address = parts.getOrNull(1)?.trim().orEmpty()
+        val tail = if (parts.size >= 3) "|${parts[2]}" else ""
+        val newEntry = "$newName|$address$tail"
+
         val sharedPrefs = getSharedPreferences("SmartCarPrefs", Context.MODE_PRIVATE)
         val devices =
             sharedPrefs.getStringSet("paired_devices", mutableSetOf())?.toMutableSet()
                 ?: mutableSetOf()
-        val oldEntry = pairedDevicesList[position]
-        val newEntry = "$newName|${oldEntry.split("|")[1]}"
 
         with(sharedPrefs.edit()) {
             devices.remove(oldEntry)
@@ -188,10 +239,10 @@ class MainActivity : AppCompatActivity() {
         listView.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_list_item_1,
-            pairedDevicesList.map { it.split("|")[0] }
+            pairedDevicesList.map { it.split("|").firstOrNull().orEmpty() }
         )
         tvPlaceholder.visibility =
-            if (pairedDevicesList.isEmpty()) TextView.VISIBLE else TextView.GONE
+            if (pairedDevicesList.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun hasBluetoothPermissions(): Boolean {
@@ -238,82 +289,81 @@ class MainActivity : AppCompatActivity() {
                     handleDeviceClick(position)
                 }
             } else {
-                Toast.makeText(this, "Bluetooth permissions are required to connect", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Bluetooth permissions are required to connect",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
     private fun handleDeviceClick(position: Int) {
-        if (!hasBluetoothPermissions()) {
-            requestBluetoothPermissions()
+        if (position < 0 || position >= pairedDevicesList.size) {
+            Toast.makeText(this, "Invalid selection", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val selectedEntry = pairedDevicesList[position].split("|")
-        if (selectedEntry.size < 2) {
-            Toast.makeText(this, "Invalid device entry", Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Check for Bluetooth permissions before attempting to navigate
+        if (hasBluetoothPermissions()) {
+            val parts = pairedDevicesList[position].split("|", limit = 3)
+            val deviceName = parts.getOrNull(0)?.trim()
+            val deviceAddress = parts.getOrNull(1)?.trim()
 
-        val deviceAddress = selectedEntry[1]
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (ActivityCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    requestBluetoothPermissions()
-                    return
-                }
+            if (deviceAddress.isNullOrEmpty()) {
+                Toast.makeText(this, "Invalid device entry", Toast.LENGTH_SHORT).show()
+                return
             }
 
-            val device = bluetoothAdapter.getRemoteDevice(deviceAddress)
-
-            if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                try {
-                    pendingDeviceAddress = deviceAddress
-                    device.createBond()
-                    Toast.makeText(this, "Pairing with device...", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Pairing failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                navigateToBluetoothServices(deviceAddress)
+            val macRegex = Regex("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}\$")
+            if (!macRegex.matches(deviceAddress)) {
+                Toast.makeText(this, "Saved address looks invalid", Toast.LENGTH_SHORT).show()
+                return
             }
-        } catch (e: IllegalArgumentException) {
-            Toast.makeText(this, "Invalid device address", Toast.LENGTH_SHORT).show()
-        } catch (e: SecurityException) {
-            Toast.makeText(this, "Permission denied. Please grant Bluetooth permissions", Toast.LENGTH_SHORT).show()
+
+            try {
+                navigateToBluetoothServices(deviceName, deviceAddress)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Unable to open device: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            // If permission is not granted, request it
             requestBluetoothPermissions()
         }
     }
 
-    private fun navigateToBluetoothServices(deviceAddress: String) {
-        Intent(this, BluetoothServicesActivity::class.java).apply {
+    private fun navigateToBluetoothServices(deviceName: String?, deviceAddress: String) {
+        val safeName = deviceName ?: "Unknown Device"
+        val intent = Intent(this, BluetoothServicesActivity::class.java).apply {
+            putExtra("DEVICE_NAME", safeName)
             putExtra("DEVICE_ADDRESS", deviceAddress)
-            startActivity(this)
         }
+        startActivity(intent)
     }
 
     private val bondStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val action = intent?.action
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
             if (BluetoothDevice.ACTION_BOND_STATE_CHANGED == action) {
-                val device: BluetoothDevice? =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent?.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent?.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    }
-                val bondState = intent?.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+                val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                }
+                val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
 
                 if (device != null && bondState == BluetoothDevice.BOND_BONDED && device.address == pendingDeviceAddress) {
-                    Toast.makeText(applicationContext, "Paired successfully!", Toast.LENGTH_SHORT).show()
-                    navigateToBluetoothServices(device.address)
-                    pendingDeviceAddress = null
+                    // Check for Bluetooth permissions before navigating
+                    if (hasBluetoothPermissions()) {
+                        navigateToBluetoothServices(device.name ?: "Unknown Device", device.address)
+                    } else {
+                        // If permission is not granted, request it
+                        // This scenario is unlikely since the bonding process often requires it,
+                        // but it's a good practice to handle it.
+                        requestBluetoothPermissions()
+                    }
                 }
             }
         }
@@ -328,12 +378,12 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         try {
             unregisterReceiver(bondStateReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Ignore if receiver was not registered
+        } catch (_: IllegalArgumentException) {
+            // Receiver might not be registered — ignore
         }
     }
 
-    // -------------------- LOGOUT MENU --------------------
+    // -------------------- MENU --------------------
 
     override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
@@ -342,6 +392,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_profile -> {
+                val intent = Intent(this, ProfileActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_settings -> {
+                val intent = Intent(this, SettingsActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_help -> {
+                val intent = Intent(this, HelpActivity::class.java)
+                startActivity(intent)
+                true
+            }
             R.id.action_logout -> {
                 showLogoutConfirmationDialog()
                 true
@@ -356,7 +421,7 @@ class MainActivity : AppCompatActivity() {
         builder.setMessage("Are you sure you want to logout?")
         builder.setPositiveButton("Yes") { dialog, _ ->
             // Firebase logout
-            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+            FirebaseAuth.getInstance().signOut()
 
             // Clear SharedPreferences
             val sharedPref = getSharedPreferences("SmartCarPrefs", MODE_PRIVATE)

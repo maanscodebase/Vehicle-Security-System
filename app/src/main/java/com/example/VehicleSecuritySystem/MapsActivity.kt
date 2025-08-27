@@ -1,4 +1,4 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle

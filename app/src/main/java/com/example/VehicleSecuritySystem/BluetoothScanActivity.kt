@@ -1,4 +1,4 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -29,14 +29,14 @@ class BluetoothScanActivity : AppCompatActivity() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private lateinit var listView: ListView
     private lateinit var btnScan: Button
-    private val discoveredDevices = mutableListOf<String>()           // we show MACs in the list
-    private val deviceMap = hashMapOf<String, String>()               // MAC -> Name
+    private val discoveredDevices = mutableListOf<String>()
+    private val deviceMap = hashMapOf<String, String>()
 
     private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION // still needed for device names visibility
+            Manifest.permission.ACCESS_FINE_LOCATION
         )
     } else {
         arrayOf(
@@ -49,12 +49,10 @@ class BluetoothScanActivity : AppCompatActivity() {
     private val requestCodeBluetooth = 101
     private var isReceiverRegistered = false
 
-    // ✅ Register for activity result from AddVehicleActivity
     private val addVehicleLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            // Forward result back to MainActivity and close this screen
             setResult(RESULT_OK)
             finish()
         }
@@ -81,18 +79,18 @@ class BluetoothScanActivity : AppCompatActivity() {
     }
 
     private fun setupListView() {
-        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, discoveredDevices)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, discoveredDevices.map { deviceMap[it] ?: it })
         listView.adapter = adapter
 
         listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
             if (checkPermissions()) {
                 val deviceMac = discoveredDevices[position]
                 val deviceName = deviceMap[deviceMac] ?: "Unnamed"
-
                 val device = bluetoothAdapter.getRemoteDevice(deviceMac)
-                if (device != null) {
-                    if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                        // 🔑 Trigger pairing if not already paired
+
+                if (device.bondState != BluetoothDevice.BOND_BONDED) {
+                    // Check permissions again before creating a bond
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
                         try {
                             val paired = device.createBond()
                             if (paired) {
@@ -105,16 +103,19 @@ class BluetoothScanActivity : AppCompatActivity() {
                             Toast.makeText(this, "Error while pairing!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        // Already paired → move to AddVehicleActivity
-                        val intent = Intent(this, AddVehicleActivity::class.java).apply {
-                            putExtra("DEVICE_NAME", deviceName)
-                            putExtra("DEVICE_ADDRESS", deviceMac)
-                        }
-                        addVehicleLauncher.launch(intent)
+                        // This block handles the rare case where the permission is lost right before bonding.
+                        Toast.makeText(this, "Bluetooth Connect permission denied.", Toast.LENGTH_SHORT).show()
                     }
+                } else {
+                    val intent = Intent(this, AddVehicleActivity::class.java).apply {
+                        putExtra("DEVICE_NAME", deviceName)
+                        putExtra("DEVICE_ADDRESS", deviceMac)
+                    }
+                    addVehicleLauncher.launch(intent)
                 }
             } else {
                 Toast.makeText(this, "Bluetooth permissions required", Toast.LENGTH_SHORT).show()
+                requestPermissions()
             }
         }
     }
@@ -129,10 +130,9 @@ class BluetoothScanActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkPermissions(): Boolean =
-        bluetoothPermissions.all { perm ->
-            ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED
-        }
+    private fun checkPermissions(): Boolean = bluetoothPermissions.all { perm ->
+        ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED
+    }
 
     private fun requestPermissions() {
         ActivityCompat.requestPermissions(this, bluetoothPermissions, requestCodeBluetooth)
@@ -151,12 +151,10 @@ class BluetoothScanActivity : AppCompatActivity() {
             return
         }
 
-        // Fresh list
         discoveredDevices.clear()
         deviceMap.clear()
         (listView.adapter as ArrayAdapter<*>).notifyDataSetChanged()
 
-        // Register receiver once
         if (!isReceiverRegistered) {
             val filter = IntentFilter(BluetoothDevice.ACTION_FOUND).apply {
                 addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
@@ -166,7 +164,6 @@ class BluetoothScanActivity : AppCompatActivity() {
         }
 
         try {
-            // If already discovering, restart
             if (bluetoothAdapter.isDiscovering) {
                 bluetoothAdapter.cancelDiscovery()
             }
@@ -177,6 +174,7 @@ class BluetoothScanActivity : AppCompatActivity() {
     }
 
     private val bluetoothReceiver = object : android.content.BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 BluetoothDevice.ACTION_FOUND -> {
@@ -193,17 +191,15 @@ class BluetoothScanActivity : AppCompatActivity() {
 
                     device?.let { dev ->
                         if (!deviceMap.containsKey(dev.address)) {
-                            val hasConnect =
-                                ContextCompat.checkSelfPermission(
-                                    this@BluetoothScanActivity,
-                                    Manifest.permission.BLUETOOTH_CONNECT
-                                ) == PackageManager.PERMISSION_GRANTED
-
+                            val hasConnect = ContextCompat.checkSelfPermission(
+                                this@BluetoothScanActivity,
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            ) == PackageManager.PERMISSION_GRANTED
                             val deviceName = if (hasConnect) dev.name ?: "Unknown Device" else "Unknown Device"
 
                             deviceMap[dev.address] = deviceName
                             discoveredDevices.add(dev.address)
-                            (listView.adapter as ArrayAdapter<*>).notifyDataSetChanged()
+                            (listView.adapter as ArrayAdapter<String>).notifyDataSetChanged()
                         }
                     }
                 }

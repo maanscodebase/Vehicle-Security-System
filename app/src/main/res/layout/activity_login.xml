@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -10,17 +11,15 @@
         android:layout_height="wrap_content"
         android:gravity="center_horizontal">
 
-        <!-- App Logo -->
         <ImageView
             android:src="@mipmap/ic_launcher_round"
             android:layout_width="100dp"
             android:layout_height="100dp"
-            android:contentDescription="@string/app_logo_desc"
+            android:contentDescription="@string/app_logo_description"
             android:layout_marginTop="32dp"/>
 
-        <!-- App Name -->
         <TextView
-            android:text="Vehicle Security System"
+            android:text="@string/app_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="28sp"
@@ -29,7 +28,6 @@
             android:layout_marginBottom="32dp"
             android:gravity="center"/>
 
-        <!-- Email Field with Rounded Background -->
         <LinearLayout
             android:orientation="horizontal"
             android:layout_width="match_parent"
@@ -49,7 +47,6 @@
                 android:background="@android:color/transparent"/>
         </LinearLayout>
 
-        <!-- Password Field with Eye Icon -->
         <LinearLayout
             android:orientation="horizontal"
             android:layout_width="match_parent"
@@ -73,11 +70,10 @@
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:src="@drawable/ic_eye"
-                android:contentDescription="@string/toggle_password"
+                android:contentDescription="Create a Strong Password"
                 android:padding="8dp"/>
         </LinearLayout>
 
-        <!-- Forgot Password Link -->
         <TextView
             android:id="@+id/tvForgotPassword"
             android:text="@string/forgot_password"
@@ -87,18 +83,15 @@
             android:layout_gravity="start"
             android:layout_marginTop="8dp"/>
 
-        <!-- Login Button -->
         <Button
             android:id="@+id/btnLogin"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/btn_login"
             android:layout_marginTop="24dp"
-            android:background="@drawable/rounded_button"
             android:textColor="#FFFFFF"
             android:padding="14dp"/>
 
-        <!-- Register Link -->
         <TextView
             android:id="@+id/tvRegister"
             android:text="@string/dont_have_account"

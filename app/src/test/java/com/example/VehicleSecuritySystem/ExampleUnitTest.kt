@@ -1,4 +1,4 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import org.junit.Test
 

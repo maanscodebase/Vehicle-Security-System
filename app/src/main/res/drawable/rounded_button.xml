@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="#6750a4"/> <!-- Button color -->
+    <solid android:color="#FFFFFF"/> <!-- Button color -->
     <corners android:radius="12dp"/> <!-- Rounded corners -->
-    <stroke android:width="2dp" android:color="#FFFFFF"/> <!-- Optional border -->
+    <stroke android:width="4dp" android:color="#6750A4"/> <!-- Optional border -->
 </shape>
 
 

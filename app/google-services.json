@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:1040598947294:android:e68d7e7fa6ce8635c2b94f",
+        "android_client_info": {
+          "package_name": "com.example.VehicleSecuritySystem"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCSZ2P-VUtcroeDEcvsAaQFntwXTGIh5sY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:1040598947294:android:a12869ade11b9eeec2b94f",
         "android_client_info": {
           "package_name": "com.example.smartcarsecurity"

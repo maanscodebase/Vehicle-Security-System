@@ -1,7 +1,6 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText

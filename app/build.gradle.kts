@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.smartcarsecurity"
+    namespace = "com.example.VehicleSecuritySystem"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.smartcarsecurity"
+        applicationId = "com.example.VehicleSecuritySystem"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.preference)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

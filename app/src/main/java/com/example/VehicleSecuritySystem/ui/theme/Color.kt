@@ -1,4 +1,4 @@
-package com.example.smartcarsecurity.ui.theme
+package com.example.VehicleSecuritySystem.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

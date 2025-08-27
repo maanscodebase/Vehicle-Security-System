@@ -1,6 +1,7 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -17,6 +18,7 @@ import android.util.Log
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -50,17 +52,12 @@ class BluetoothServicesActivity : AppCompatActivity() {
         val COMMAND_LOCATION: Byte = 'L'.code.toByte()
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_bluetooth_services)
 
-        handler = Handler(Looper.getMainLooper())
-        sharedPref = getSharedPreferences("CarLocation", Context.MODE_PRIVATE)
-
-        tvStatus = findViewById(R.id.tvEngineAccess)
-        btnEngine = findViewById(R.id.btnEngineAccess)
-        btnLocation = findViewById(R.id.btnLocation)
-        tvBluetoothStatus = findViewById(R.id.tvBluetoothStatus)
+        initializeViews()
 
         deviceAddress = intent.getStringExtra("DEVICE_ADDRESS")
         if (deviceAddress.isNullOrEmpty()) {
@@ -69,6 +66,9 @@ class BluetoothServicesActivity : AppCompatActivity() {
             return
         }
 
+        handler = Handler(Looper.getMainLooper())
+        sharedPref = getSharedPreferences("CarLocation", Context.MODE_PRIVATE)
+
         updateUIState("Waiting for connection...")
 
         if (checkPermissions()) {
@@ -76,30 +76,37 @@ class BluetoothServicesActivity : AppCompatActivity() {
         }
     }
 
+    private fun initializeViews() {
+        tvStatus = findViewById(R.id.tvEngineAccess)
+        btnEngine = findViewById(R.id.btnEngineAccess)
+        btnLocation = findViewById(R.id.btnLocation)
+        tvBluetoothStatus = findViewById(R.id.tvBluetoothStatus)
+    }
+
     // 🔹 Updates status TextView with connection/command info
     private fun updateUIState(message: String? = null) {
+        if (!::tvStatus.isInitialized || !::btnEngine.isInitialized) return
         tvStatus.text = if (isUnlocked) "ENGINE ON" else "ENGINE OFF"
         btnEngine.setImageResource(if (isUnlocked) R.drawable.button_power_on else R.drawable.button_power_off)
-
         message?.let {
-            tvBluetoothStatus.text = it
+            if (::tvBluetoothStatus.isInitialized) {
+                tvBluetoothStatus.text = it
+            }
         }
     }
 
     private fun checkPermissions(): Boolean {
         val permissionsToRequest = mutableListOf<String>()
+        val hasFineLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
-            }
+            val hasConnect = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            val hasScan = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+            if (!hasConnect) permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
+            if (!hasScan) permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
+            if (!hasFineLocation) permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
         } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
+            if (!hasFineLocation) permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
         return if (permissionsToRequest.isNotEmpty()) {
@@ -108,6 +115,7 @@ class BluetoothServicesActivity : AppCompatActivity() {
         } else true
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == requestPermissionCode) {
@@ -120,42 +128,52 @@ class BluetoothServicesActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun connectToDevice() {
-        try {
-            val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-            val bluetoothAdapter = bluetoothManager.adapter
+        executor.execute {
+            try {
+                val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                val bluetoothAdapter = bluetoothManager.adapter
 
-            if (!hasRequiredPermissions()) {
-                Toast.makeText(this, "Missing required permissions", Toast.LENGTH_SHORT).show()
-                finish()
-                return
-            }
+                if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Bluetooth is not available or not enabled", Toast.LENGTH_SHORT).show()
+                        finish()
+                    }
+                    return@execute
+                }
 
-            val device: BluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceAddress!!)
-            val BLUETOOTH_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+                val device: BluetoothDevice = bluetoothAdapter.getRemoteDevice(deviceAddress!!)
+                val BLUETOOTH_SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
-            socket = try {
-                device.createRfcommSocketToServiceRecord(BLUETOOTH_SPP_UUID)
+                socket = try {
+                    device.createRfcommSocketToServiceRecord(BLUETOOTH_SPP_UUID)
+                } catch (e: Exception) {
+                    val createMethod = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                    createMethod.invoke(device, 1) as BluetoothSocket
+                }
+
+                bluetoothAdapter.cancelDiscovery()
+                socket?.connect()
+
+                outputStream = socket?.outputStream
+                inputStream = socket?.inputStream
+
+                runOnUiThread {
+                    updateUIState("✅ Connected to ${device.name}")
+                    startListeningForMessages()
+                    setupControls()
+                    sendCommand(COMMAND_OFF)
+                }
+
             } catch (e: Exception) {
-                val createMethod = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-                createMethod.invoke(device, 1) as BluetoothSocket
+                runOnUiThread {
+                    updateUIState("❌ Connection failed: ${e.message}")
+                    Log.e("BluetoothServices", "Connection failed", e)
+                    Toast.makeText(this@BluetoothServicesActivity, "Connection failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
             }
-
-            bluetoothAdapter.cancelDiscovery()
-            socket?.connect()
-
-            outputStream = socket?.outputStream
-            inputStream = socket?.inputStream
-
-            updateUIState("✅ Connected to ${device.name}")
-            startListeningForMessages()
-            setupControls()
-            sendCommand(COMMAND_OFF) // safety default
-
-        } catch (e: Exception) {
-            updateUIState("❌ Connection failed: ${e.message}")
-            Log.e("BluetoothServices", "Connection failed", e)
-            finish()
         }
     }
 
@@ -171,7 +189,6 @@ class BluetoothServicesActivity : AppCompatActivity() {
                         val message = String(buffer, 0, bytes).trim()
                         runOnUiThread {
                             updateUIState("Arduino: $message")
-
                             when {
                                 message.contains("Ignition ON", ignoreCase = true) -> {
                                     isUnlocked = true
@@ -289,23 +306,23 @@ class BluetoothServicesActivity : AppCompatActivity() {
         val latitudeStr = sharedPref.getString("latitude", null)
         val longitudeStr = sharedPref.getString("longitude", null)
 
-        if (latitudeStr != null && longitudeStr != null) {
-            val intent = Intent(this, MapsActivity::class.java)
-            intent.putExtra("latitude", latitudeStr.toDouble())
-            intent.putExtra("longitude", longitudeStr.toDouble())
-            startActivity(intent)
-        } else {
-            val intent = Intent(this, MapsActivity::class.java)
-            intent.putExtra("latitude", 31.5204) // fallback Lahore
-            intent.putExtra("longitude", 74.3587)
-            startActivity(intent)
-            Toast.makeText(this, "Using demo location - no GPS fix yet", Toast.LENGTH_SHORT).show()
+        val intent = Intent(this, MapsActivity::class.java).apply {
+            if (latitudeStr != null && longitudeStr != null) {
+                putExtra("latitude", latitudeStr.toDouble())
+                putExtra("longitude", longitudeStr.toDouble())
+            } else {
+                putExtra("latitude", 31.5204)
+                putExtra("longitude", 74.3587)
+                Toast.makeText(this@BluetoothServicesActivity, "Using demo location - no GPS fix yet", Toast.LENGTH_SHORT).show()
+            }
         }
+        startActivity(intent)
     }
 
     private fun hasRequiredPermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
         } else {
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         }
@@ -314,7 +331,7 @@ class BluetoothServicesActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            sendCommand(COMMAND_OFF)
+            outputStream?.let { sendCommand(COMMAND_OFF) }
             outputStream?.close()
             inputStream?.close()
             socket?.close()

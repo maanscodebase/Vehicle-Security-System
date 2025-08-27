@@ -14,11 +14,9 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="?attr/colorPrimary"
-        android:textSize="24sp"
-        android:textStyle="bold"
         android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
         app:popupTheme="@style/CustomPopupMenu"
-        app:title="Vehicle Security System"
+        app:title="@string/app_name"
         app:titleTextColor="@android:color/white" />
 
     <ImageView
@@ -27,17 +25,15 @@
         android:layout_height="120dp"
         android:layout_gravity="center"
         android:layout_marginTop="40dp"
-        android:contentDescription="App Logo"
+        android:contentDescription="@string/app_logo_description"
         android:src="@drawable/logo" />
 
-    <!-- Container for ListView and placeholder -->
     <FrameLayout
         android:id="@+id/flListContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- List of Connected Vehicles -->
         <ListView
             android:id="@+id/lvVehicles"
             android:layout_width="match_parent"
@@ -46,7 +42,6 @@
             android:dividerHeight="1dp"
             android:padding="8dp" />
 
-        <!-- Placeholder TextView (centered in the FrameLayout) -->
         <TextView
             android:id="@+id/tvPlaceholder"
             android:layout_width="match_parent"
@@ -58,7 +53,6 @@
             android:visibility="gone" />
     </FrameLayout>
 
-    <!-- Floating Action Button: '+' remains at the bottom center -->
     <ImageButton
         android:id="@+id/btnAddVehicle"
         android:layout_width="70dp"
@@ -66,7 +60,7 @@
         android:layout_gravity="center_horizontal|bottom"
         android:layout_marginTop="16dp"
         android:background="@drawable/rounded_button"
-        android:contentDescription="Add Vehicle"
+        android:contentDescription="Tap '+' to Add Vehicles"
         android:clickable="true"
         android:scaleType="fitCenter"
         android:src="@drawable/ic_add"

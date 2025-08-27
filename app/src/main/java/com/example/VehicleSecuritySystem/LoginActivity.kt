@@ -1,4 +1,4 @@
-package com.example.smartcarsecurity
+package com.example.VehicleSecuritySystem
 
 import android.content.Intent
 import android.os.Bundle
@@ -6,8 +6,9 @@ import android.text.method.HideReturnsTransformationMethod
 import android.text.method.PasswordTransformationMethod
 import android.util.Patterns
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.example.smartcarsecurity.databinding.ActivityLoginBinding
+import com.example.VehicleSecuritySystem.databinding.ActivityLoginBinding
 import com.google.firebase.auth.FirebaseAuth
 
 class LoginActivity : AppCompatActivity() {
@@ -22,13 +23,6 @@ class LoginActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         auth = FirebaseAuth.getInstance()
-
-        // Auto-redirect if already logged in
-        if (auth.currentUser != null) {
-            startActivity(Intent(this, MainActivity::class.java))
-            finishAffinity()
-            return
-        }
 
         // Toggle password visibility
         binding.ivTogglePassword.setOnClickListener {
@@ -67,9 +61,19 @@ class LoginActivity : AppCompatActivity() {
 
             auth.signInWithEmailAndPassword(email, password)
                 .addOnSuccessListener {
-                    Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
-                    startActivity(Intent(this, MainActivity::class.java))
-                    finishAffinity()
+                    val user = auth.currentUser
+                    if (user != null && user.isEmailVerified) {
+                        Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this, MainActivity::class.java))
+                        finishAffinity()
+                    } else {
+                        auth.signOut()
+                        AlertDialog.Builder(this)
+                            .setTitle("Email Not Verified")
+                            .setMessage("Please verify your email before logging in.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
                 }
                 .addOnFailureListener {
                     Toast.makeText(this, "Login Failed: ${it.message}", Toast.LENGTH_LONG).show()

@@ -2,16 +2,37 @@
     <string name="btn_register">Register</string>
     <string name="already_have_account">Already have an account? Login</string>
     <string name="title_activity_login">Login</string>
-    <string name="app_name">Smart Car Security</string>
+    <string name="app_name">Vehicle Security System</string>
     <string name="app_logo_desc">App Logo</string>
+    <string name="app_logo_description">App Logo</string>
     <string name="hint_email">Email (@gmail.com)</string>
+    <string name="hint_phone">Phone</string>
+    <string name="toggle_password_description">Toggle Password Visibility</string>
     <string name="hint_password">Password</string>
     <string name="btn_login">Login</string>
     <string name="dont_have_account">Don\'t have an account? Register</string>
     <string name="toggle_password">Toggle Password Visibility</string>
     <string name="hint_confirm_password">Confirm Password</string>
     <string name="forgot_password">Forgot password?</string>
-    <string name="title_activity_maps">MapsActivity</string> <!-- Add this -->
+    <string name="title_activity_maps">MapsActivity</string>
+    <string name="title_activity_help">HelpActivity</string>
+    <string name="title_activity_settings">SettingsActivity</string>
+    <string name="add_vehicle_description">Add Vehicle</string>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Messages</string>
+    <string name="sync_header">Sync</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Your signature</string>
+    <string name="reply_title">Default reply action</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Sync email periodically</string>
+    <string name="attachment_title">Download incoming attachments</string>
+    <string name="attachment_summary_on">Automatically download attachments for incoming emails
+    </string>
+    <string name="attachment_summary_off">Only download attachments when manually requested</string> <!-- Add this -->
 
 
 </resources>
