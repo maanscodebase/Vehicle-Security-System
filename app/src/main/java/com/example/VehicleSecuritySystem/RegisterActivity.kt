@@ -50,13 +50,13 @@ class RegisterActivity : AppCompatActivity() {
         // Register button
         binding.registerButton.setOnClickListener {
             val email = binding.emailEditText.text.toString().trim()
-            val phone = binding.phoneEditText.text.toString().trim()
+            val name = binding.nameEditText.text.toString().trim()
             val password = binding.passwordEditText.text.toString().trim()
             val confirmPassword = binding.confirmPasswordEditText.text.toString().trim()
 
-            if (!validate(email, phone, password, confirmPassword)) return@setOnClickListener
+            if (!validate(email, name, password, confirmPassword)) return@setOnClickListener
 
-            registerUserWithVerification(email, phone, password)
+            registerUserWithVerification(email, name, password)
         }
 
         // Navigate to login screen
@@ -66,7 +66,7 @@ class RegisterActivity : AppCompatActivity() {
         }
     }
 
-    private fun registerUserWithVerification(email: String, phone: String, password: String) {
+    private fun registerUserWithVerification(email: String, name: String, password: String) {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnSuccessListener { authResult ->
                 val user = authResult.user!!
@@ -75,7 +75,7 @@ class RegisterActivity : AppCompatActivity() {
                 user.sendEmailVerification()
                     .addOnSuccessListener {
                         // Save user data (unverified yet)
-                        saveUserToFirestore(user.uid, email, phone)
+                        saveUserToFirestore(user.uid, email, name)
 
                         AlertDialog.Builder(this)
                             .setTitle("Verify Your Email")
@@ -104,12 +104,13 @@ class RegisterActivity : AppCompatActivity() {
             }
     }
 
-    private fun saveUserToFirestore(userId: String, email: String, phone: String) {
+    private fun saveUserToFirestore(userId: String, email: String, name: String) {
         val userMap = hashMapOf(
             "email" to email,
-            "phone" to phone,
+            "name" to name,
             "emailVerified" to false,
-            "createdAt" to System.currentTimeMillis()
+            "createdAt" to System.currentTimeMillis(),
+            "status" to "active" // 🆕 Add this new field
         )
 
         db.collection("users").document(userId).set(userMap)
@@ -140,17 +141,16 @@ class RegisterActivity : AppCompatActivity() {
         }
     }
 
-    private fun validate(email: String, phone: String, password: String, confirmPassword: String): Boolean {
+    private fun validate(email: String, name: String, password: String, confirmPassword: String): Boolean {
         // Email validation
         if (!isValidEmailFormat(email)) {
             binding.emailEditText.error = "Enter a valid email address (example@domain.com)"
             return false
         }
 
-        // Phone validation
-        val phonePattern = Regex("^(03[0-9]{9}|\\+923[0-9]{9})$")
-        if (!phonePattern.matches(phone)) {
-            binding.phoneEditText.error = "Enter valid phone (03125541120 or +923125541120)"
+        // Name validation
+        if (name.isEmpty()) {
+            binding.nameEditText.error = "Name cannot be empty"
             return false
         }
 

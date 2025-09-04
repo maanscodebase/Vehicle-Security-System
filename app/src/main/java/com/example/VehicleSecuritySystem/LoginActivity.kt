@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.VehicleSecuritySystem.databinding.ActivityLoginBinding
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 
 class LoginActivity : AppCompatActivity() {
 
@@ -62,21 +63,20 @@ class LoginActivity : AppCompatActivity() {
             auth.signInWithEmailAndPassword(email, password)
                 .addOnSuccessListener {
                     val user = auth.currentUser
-                    if (user != null && user.isEmailVerified) {
-                        Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
-                        startActivity(Intent(this, MainActivity::class.java))
-                        finishAffinity()
+                    if (user != null) {
+                        if (user.isEmailVerified) {
+                            Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
+                            startActivity(Intent(this, MainActivity::class.java))
+                            finishAffinity()
+                        } else {
+                            showVerificationDialog(user)
+                        }
                     } else {
-                        auth.signOut()
-                        AlertDialog.Builder(this)
-                            .setTitle("Email Not Verified")
-                            .setMessage("Please verify your email before logging in.")
-                            .setPositiveButton("OK", null)
-                            .show()
+                        Toast.makeText(this, "User not found. Please try again.", Toast.LENGTH_LONG).show()
                     }
                 }
-                .addOnFailureListener {
-                    Toast.makeText(this, "Login Failed: ${it.message}", Toast.LENGTH_LONG).show()
+                .addOnFailureListener { exception ->
+                    handleLoginFailure(exception)
                 }
         }
 
@@ -84,6 +84,36 @@ class LoginActivity : AppCompatActivity() {
         binding.tvRegister.setOnClickListener {
             startActivity(Intent(this, RegisterActivity::class.java))
             finish()
+        }
+    }
+
+    private fun showVerificationDialog(user: com.google.firebase.auth.FirebaseUser) {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Email Not Verified")
+            .setMessage("Please verify your email before logging in. A verification link was sent to ${user.email}.")
+            .setPositiveButton("OK", null)
+            .setNegativeButton("Resend Email") { _, _ ->
+                user.sendEmailVerification()
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Verification email resent.", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(this, "Failed to resend email. Please try again later.", Toast.LENGTH_LONG).show()
+                    }
+            }
+            .create()
+        dialog.show()
+    }
+
+    private fun handleLoginFailure(exception: Exception) {
+        when (exception) {
+            is FirebaseAuthInvalidUserException -> {
+                // This can happen if the email is not registered
+                Toast.makeText(this, "Login Failed: Invalid credentials.", Toast.LENGTH_LONG).show()
+            }
+            else -> {
+                Toast.makeText(this, "Login Failed: ${exception.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 }
