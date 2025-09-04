@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.Button // Import the Button class
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -34,7 +35,7 @@ class BluetoothServicesActivity : AppCompatActivity() {
 
     private lateinit var tvStatus: TextView
     private lateinit var btnEngine: ImageButton
-    private lateinit var btnLocation: ImageButton
+    private lateinit var btnLocation: Button // Change the type from ImageButton to Button
     private lateinit var tvBluetoothStatus: TextView
     private var socket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
@@ -81,6 +82,7 @@ class BluetoothServicesActivity : AppCompatActivity() {
         btnEngine = findViewById(R.id.btnEngineAccess)
         btnLocation = findViewById(R.id.btnLocation)
         tvBluetoothStatus = findViewById(R.id.tvBluetoothStatus)
+        setupControls() // This line was missing, adding it to set up button listeners.
     }
 
     // 🔹 Updates status TextView with connection/command info
@@ -311,9 +313,10 @@ class BluetoothServicesActivity : AppCompatActivity() {
                 putExtra("latitude", latitudeStr.toDouble())
                 putExtra("longitude", longitudeStr.toDouble())
             } else {
-                putExtra("latitude", 31.5204)
-                putExtra("longitude", 74.3587)
-                Toast.makeText(this@BluetoothServicesActivity, "Using demo location - no GPS fix yet", Toast.LENGTH_SHORT).show()
+                // This is the fallback block
+                putExtra("latitude", 33.59102)
+                putExtra("longitude", 73.08789)
+                Toast.makeText(this@BluetoothServicesActivity, "Showing Last Known Location - no GPS fix yet", Toast.LENGTH_SHORT).show()
             }
         }
         startActivity(intent)
