@@ -26,8 +26,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-        // Example location (Lahore)
-        val carLocation = LatLng(31.5204, 74.3587)
+        // Example location (FGQADC)
+        val carLocation = LatLng(33.5905, 73.0876)
         mMap.addMarker(MarkerOptions().position(carLocation).title("My Car"))
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(carLocation, 15f))
     }

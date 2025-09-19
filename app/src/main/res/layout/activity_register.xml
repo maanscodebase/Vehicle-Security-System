@@ -32,25 +32,28 @@
             android:gravity="center"/>
 
         <EditText
+            android:id="@+id/nameEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Full Name"
+            android:inputType="textPersonName"
+            android:padding="12dp"
+            android:background="@drawable/rounded_edittext"
+            android:autofillHints="name"
+            android:layout_marginBottom="16dp"/>
+
+        <EditText
             android:id="@+id/emailEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/hint_email"
+            android:hint="Email(domain@example.com)"
             android:inputType="textEmailAddress"
             android:padding="12dp"
             android:background="@drawable/rounded_edittext"
             android:autofillHints="emailAddress"
             android:layout_marginBottom="16dp"/>
 
-        <EditText
-            android:id="@+id/phoneEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/hint_phone"
-            android:inputType="phone"
-            android:padding="12dp"
-            android:background="@drawable/rounded_edittext"
-            android:layout_marginBottom="16dp"/>
+
 
         <LinearLayout
             android:orientation="horizontal"

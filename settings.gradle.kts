@@ -1,14 +1,8 @@
 pluginManagement {
     repositories {
-        google {
-            content {
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google.*")
-                includeGroupByRegex("androidx.*")
-            }
-        }
-        mavenCentral()
+        google()
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 dependencyResolutionManagement {
@@ -16,9 +10,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
-rootProject.name = "SmartCarSecurity"
+rootProject.name = "VehicleSecuritySystem"
 include(":app")
- 

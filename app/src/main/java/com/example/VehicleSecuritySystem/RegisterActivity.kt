@@ -79,7 +79,8 @@ class RegisterActivity : AppCompatActivity() {
 
                         AlertDialog.Builder(this)
                             .setTitle("Verify Your Email")
-                            .setMessage("A verification email has been sent to $email. Please verify before logging in.")
+                            .setMessage("A verification email has been sent to $email. Please verify before logging in. If you cannot see it in inbox, check the spam folder.")
+
                             .setPositiveButton("OK") { _, _ ->
                                 auth.signOut()
                                 startActivity(Intent(this, LoginActivity::class.java))

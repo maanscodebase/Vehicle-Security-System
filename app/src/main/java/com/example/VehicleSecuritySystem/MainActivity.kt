@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.*
 import androidx.annotation.RequiresPermission
@@ -20,13 +21,14 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import java.util.concurrent.Executor
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var listView: ListView
     private lateinit var tvPlaceholder: TextView
-    private val pairedDevicesList = mutableListOf<String>()
+    private val vehiclesList = mutableListOf<Vehicle>()
     private val permissionRequestCode = 101
     private lateinit var executor: Executor
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -34,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private var lastClickedPosition: Int? = null
 
     private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseFirestore
+    private lateinit var userId: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,22 +49,25 @@ class MainActivity : AppCompatActivity() {
         bluetoothAdapter = bluetoothManager.adapter
 
         auth = FirebaseAuth.getInstance()
+        db = FirebaseFirestore.getInstance()
+
+        // Ensure the user is authenticated before proceeding
+        auth.currentUser?.uid?.let {
+            userId = it
+        } ?: run {
+            forceLogout("User not authenticated.")
+            return
+        }
 
         initializeViews()
         setupClickListeners()
-        loadSavedDevices()
-
-        if (intent.getBooleanExtra("FROM_ADD_VEHICLE", false)) {
-            loadSavedDevices()
-        }
+        loadSavedDevices() // This will now load from Firestore
 
         executor = ContextCompat.getMainExecutor(this)
 
-        // Register for bond-state changes
         val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
         registerReceiver(bondStateReceiver, filter)
 
-        // If device has no Bluetooth, inform and exit gracefully
         if (bluetoothAdapter == null) {
             AlertDialog.Builder(this)
                 .setTitle("Bluetooth unavailable")
@@ -110,21 +117,19 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, BluetoothScanActivity::class.java))
         }
 
-        listView.onItemClickListener =
-            AdapterView.OnItemClickListener { _, _, position, _ ->
-                lastClickedPosition = position
-                if (hasBluetoothPermissions()) {
-                    handleDeviceClick(position)
-                } else {
-                    requestBluetoothPermissions()
-                }
+        listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+            lastClickedPosition = position
+            if (hasBluetoothPermissions()) {
+                handleDeviceClick(position)
+            } else {
+                requestBluetoothPermissions()
             }
+        }
 
-        listView.onItemLongClickListener =
-            AdapterView.OnItemLongClickListener { _, _, position, _ ->
-                showOptionsDialog(position)
-                true
-            }
+        listView.onItemLongClickListener = AdapterView.OnItemLongClickListener { _, _, position, _ ->
+            showOptionsDialog(position)
+            true
+        }
     }
 
     private fun showOptionsDialog(position: Int) {
@@ -141,19 +146,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Your existing biometric authentication function. It is already correctly
+    // configured for the hybrid (fingerprint + PIN/password) dialog.
     private fun authenticateAndRun(action: () -> Unit) {
         val biometricManager = BiometricManager.from(this)
-        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
             != BiometricManager.BIOMETRIC_SUCCESS
         ) {
-            Toast.makeText(this, "Fingerprint not available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Biometric authentication not available", Toast.LENGTH_SHORT).show()
             return
         }
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Authentication Required")
-            .setDescription("Confirm your fingerprint to continue")
-            .setNegativeButtonText("Cancel")
+            .setDescription("Confirm your identity to continue")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
             .build()
 
         val biometricPrompt = BiometricPrompt(this, executor,
@@ -173,8 +180,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showRenameDialog(position: Int) {
-        val currentName = pairedDevicesList[position].split("|").firstOrNull().orEmpty()
-        val input = EditText(this).apply { setText(currentName) }
+        val vehicle = vehiclesList.getOrNull(position) ?: return
+        val input = EditText(this).apply { setText(vehicle.name) }
 
         AlertDialog.Builder(this).apply {
             setTitle("Rename Vehicle")
@@ -188,19 +195,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun deleteVehicle(position: Int) {
-        val sharedPrefs = getSharedPreferences("SmartCarPrefs", Context.MODE_PRIVATE)
-        val devices =
-            sharedPrefs.getStringSet("paired_devices", mutableSetOf())?.toMutableSet()
-                ?: mutableSetOf()
-        val entryToRemove = pairedDevicesList.getOrNull(position) ?: return
-
-        with(sharedPrefs.edit()) {
-            devices.remove(entryToRemove)
-            putStringSet("paired_devices", devices)
-            apply()
+        val vehicle = vehiclesList.getOrNull(position) ?: return
+        vehicle.id?.let { docId ->
+            db.collection("users").document(userId)
+                .collection("vehicles").document(docId)
+                .delete()
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Vehicle deleted", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Log.w("MainActivity", "Error deleting document", e)
+                    Toast.makeText(this, "Error deleting vehicle", Toast.LENGTH_SHORT).show()
+                }
         }
-        loadSavedDevices()
-        Toast.makeText(this, "Vehicle deleted", Toast.LENGTH_SHORT).show()
     }
 
     private fun updateVehicleName(position: Int, newName: String) {
@@ -209,57 +216,56 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val oldEntry = pairedDevicesList.getOrNull(position) ?: return
-        val parts = oldEntry.split("|", limit = 3)
-        val address = parts.getOrNull(1)?.trim().orEmpty()
-        val tail = if (parts.size >= 3) "|${parts[2]}" else ""
-        val newEntry = "$newName|$address$tail"
-
-        val sharedPrefs = getSharedPreferences("SmartCarPrefs", Context.MODE_PRIVATE)
-        val devices =
-            sharedPrefs.getStringSet("paired_devices", mutableSetOf())?.toMutableSet()
-                ?: mutableSetOf()
-
-        with(sharedPrefs.edit()) {
-            devices.remove(oldEntry)
-            devices.add(newEntry)
-            putStringSet("paired_devices", devices)
-            apply()
+        val vehicle = vehiclesList.getOrNull(position) ?: return
+        vehicle.id?.let { docId ->
+            db.collection("users").document(userId)
+                .collection("vehicles").document(docId)
+                .update("name", newName)
+                .addOnSuccessListener {
+                    Toast.makeText(this, "Vehicle renamed", Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { e ->
+                    Log.w("MainActivity", "Error updating document", e)
+                    Toast.makeText(this, "Error renaming vehicle", Toast.LENGTH_SHORT).show()
+                }
         }
-        loadSavedDevices()
     }
 
     private fun loadSavedDevices() {
-        val sharedPrefs = getSharedPreferences("SmartCarPrefs", Context.MODE_PRIVATE)
-        pairedDevicesList.clear()
-        sharedPrefs.getStringSet("paired_devices", mutableSetOf())?.let {
-            pairedDevicesList.addAll(it)
-        }
+        val userVehiclesRef = db.collection("users").document(userId).collection("vehicles")
 
-        listView.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_list_item_1,
-            pairedDevicesList.map { it.split("|").firstOrNull().orEmpty() }
-        )
-        tvPlaceholder.visibility =
-            if (pairedDevicesList.isEmpty()) View.VISIBLE else View.GONE
+        // Use a real-time listener to automatically update the UI when data changes
+        userVehiclesRef.addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                Log.w("MainActivity", "Listen failed.", e)
+                Toast.makeText(this, "Failed to load vehicles.", Toast.LENGTH_SHORT).show()
+                return@addSnapshotListener
+            }
+
+            if (snapshot != null) {
+                vehiclesList.clear()
+                for (doc in snapshot.documents) {
+                    val vehicle = doc.toObject(Vehicle::class.java)
+                    if (vehicle != null) {
+                        vehiclesList.add(vehicle)
+                    }
+                }
+                listView.adapter = ArrayAdapter(
+                    this,
+                    android.R.layout.simple_list_item_1,
+                    vehiclesList.map { it.name }
+                )
+                tvPlaceholder.visibility = if (vehiclesList.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
     }
 
     private fun hasBluetoothPermissions(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.BLUETOOTH_SCAN
-                    ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
         } else {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         }
     }
 
@@ -289,53 +295,39 @@ class MainActivity : AppCompatActivity() {
                     handleDeviceClick(position)
                 }
             } else {
-                Toast.makeText(
-                    this,
-                    "Bluetooth permissions are required to connect",
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(this, "Bluetooth permissions are required to connect", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     private fun handleDeviceClick(position: Int) {
-        if (position < 0 || position >= pairedDevicesList.size) {
-            Toast.makeText(this, "Invalid selection", Toast.LENGTH_SHORT).show()
+        if (!hasBluetoothPermissions()) {
+            requestBluetoothPermissions()
             return
         }
 
-        // Check for Bluetooth permissions before attempting to navigate
-        if (hasBluetoothPermissions()) {
-            val parts = pairedDevicesList[position].split("|", limit = 3)
-            val deviceName = parts.getOrNull(0)?.trim()
-            val deviceAddress = parts.getOrNull(1)?.trim()
+        val vehicle = vehiclesList.getOrNull(position)
+        if (vehicle == null || vehicle.macAddress.isEmpty()) {
+            Toast.makeText(this, "Invalid device entry", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-            if (deviceAddress.isNullOrEmpty()) {
-                Toast.makeText(this, "Invalid device entry", Toast.LENGTH_SHORT).show()
-                return
-            }
+        val macRegex = Regex("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}\$")
+        if (!macRegex.matches(vehicle.macAddress)) {
+            Toast.makeText(this, "Saved address looks invalid", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-            val macRegex = Regex("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}\$")
-            if (!macRegex.matches(deviceAddress)) {
-                Toast.makeText(this, "Saved address looks invalid", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            try {
-                navigateToBluetoothServices(deviceName, deviceAddress)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Unable to open device: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            // If permission is not granted, request it
-            requestBluetoothPermissions()
+        try {
+            navigateToBluetoothServices(vehicle.name, vehicle.macAddress)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Unable to open device: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun navigateToBluetoothServices(deviceName: String?, deviceAddress: String) {
-        val safeName = deviceName ?: "Unknown Device"
+    private fun navigateToBluetoothServices(deviceName: String, deviceAddress: String) {
         val intent = Intent(this, BluetoothServicesActivity::class.java).apply {
-            putExtra("DEVICE_NAME", safeName)
+            putExtra("DEVICE_NAME", deviceName)
             putExtra("DEVICE_ADDRESS", deviceAddress)
         }
         startActivity(intent)
@@ -355,13 +347,9 @@ class MainActivity : AppCompatActivity() {
                 val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
 
                 if (device != null && bondState == BluetoothDevice.BOND_BONDED && device.address == pendingDeviceAddress) {
-                    // Check for Bluetooth permissions before navigating
                     if (hasBluetoothPermissions()) {
                         navigateToBluetoothServices(device.name ?: "Unknown Device", device.address)
                     } else {
-                        // If permission is not granted, request it
-                        // This scenario is unlikely since the bonding process often requires it,
-                        // but it's a good practice to handle it.
                         requestBluetoothPermissions()
                     }
                 }
@@ -371,7 +359,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        loadSavedDevices()
+        // No need to call loadSavedDevices here since the snapshot listener handles updates
     }
 
     override fun onDestroy() {
@@ -379,11 +367,8 @@ class MainActivity : AppCompatActivity() {
         try {
             unregisterReceiver(bondStateReceiver)
         } catch (_: IllegalArgumentException) {
-            // Receiver might not be registered — ignore
         }
     }
-
-    // -------------------- MENU --------------------
 
     override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
@@ -394,6 +379,11 @@ class MainActivity : AppCompatActivity() {
         return when (item.itemId) {
             R.id.action_profile -> {
                 val intent = Intent(this, ProfileActivity::class.java)
+                startActivity(intent)
+                true
+            }
+            R.id.action_about -> {
+                val intent = Intent(this, AboutActivity::class.java)
                 startActivity(intent)
                 true
             }
@@ -420,14 +410,9 @@ class MainActivity : AppCompatActivity() {
         builder.setTitle("Logout")
         builder.setMessage("Are you sure you want to logout?")
         builder.setPositiveButton("Yes") { dialog, _ ->
-            // Firebase logout
             FirebaseAuth.getInstance().signOut()
-
-            // Clear SharedPreferences
             val sharedPref = getSharedPreferences("SmartCarPrefs", MODE_PRIVATE)
             sharedPref.edit().clear().apply()
-
-            // Navigate to LoginActivity and clear back stack
             val intent = Intent(this, LoginActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             startActivity(intent)

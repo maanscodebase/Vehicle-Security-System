@@ -11,12 +11,15 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.VehicleSecuritySystem.databinding.ActivityLoginBinding
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.firestore.FirebaseFirestore
 
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
     private lateinit var auth: FirebaseAuth
     private var isPasswordVisible = false
+    private val db = FirebaseFirestore.getInstance() // 🆕 Initialize Firestore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,12 +67,20 @@ class LoginActivity : AppCompatActivity() {
                 .addOnSuccessListener {
                     val user = auth.currentUser
                     if (user != null) {
-                        if (user.isEmailVerified) {
-                            Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
-                            startActivity(Intent(this, MainActivity::class.java))
-                            finishAffinity()
-                        } else {
-                            showVerificationDialog(user)
+                        // Crucially, we reload the user's data from Firebase before checking their status
+                        user.reload().addOnSuccessListener {
+                            // Check the status of the refreshed user object
+                            val refreshedUser = auth.currentUser
+                            if (refreshedUser?.isEmailVerified == true) {
+                                // 🆕 Update Firestore after successful verification check
+                                updateUserVerificationStatusInFirestore(refreshedUser.uid, true)
+                                Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
+                                startActivity(Intent(this, MainActivity::class.java))
+                                finishAffinity()
+                            } else {
+                                // If still not verified after reload, show the dialog
+                                showVerificationDialog(refreshedUser!!)
+                            }
                         }
                     } else {
                         Toast.makeText(this, "User not found. Please try again.", Toast.LENGTH_LONG).show()
@@ -115,5 +126,17 @@ class LoginActivity : AppCompatActivity() {
                 Toast.makeText(this, "Login Failed: ${exception.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    // 🆕 New function to update the Firestore document
+    private fun updateUserVerificationStatusInFirestore(userId: String, isVerified: Boolean) {
+        val userDocRef = db.collection("users").document(userId)
+        userDocRef.update("emailVerified", isVerified)
+            .addOnSuccessListener {
+                // Log or handle success
+            }
+            .addOnFailureListener { e ->
+                // Log or handle error
+            }
     }
 }

@@ -14,12 +14,15 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.util.Log
-import android.widget.Button // Import the Button class
+import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.RequiresPermission
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -28,14 +31,22 @@ import androidx.core.content.ContextCompat
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.Executors
+
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 
 class BluetoothServicesActivity : AppCompatActivity() {
 
     private lateinit var tvStatus: TextView
     private lateinit var btnEngine: ImageButton
-    private lateinit var btnLocation: Button // Change the type from ImageButton to Button
+    private lateinit var btnLocation: Button
     private lateinit var tvBluetoothStatus: TextView
     private var socket: BluetoothSocket? = null
     private var outputStream: OutputStream? = null
@@ -45,7 +56,13 @@ class BluetoothServicesActivity : AppCompatActivity() {
     private var deviceAddress: String? = null
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var sharedPref: SharedPreferences
-    private lateinit var handler: Handler
+    private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseFirestore
+
+    // Biometric-related variables
+    private lateinit var biometricPrompt: BiometricPrompt
+    private lateinit var promptInfo: BiometricPrompt.PromptInfo
+    private var commandToSend: Byte = 0
 
     companion object {
         val COMMAND_ON: Byte = '1'.code.toByte()
@@ -59,6 +76,11 @@ class BluetoothServicesActivity : AppCompatActivity() {
         setContentView(R.layout.activity_bluetooth_services)
 
         initializeViews()
+        setupBiometricPrompt()
+
+        // Initialize Firebase
+        auth = Firebase.auth
+        db = Firebase.firestore
 
         deviceAddress = intent.getStringExtra("DEVICE_ADDRESS")
         if (deviceAddress.isNullOrEmpty()) {
@@ -67,10 +89,18 @@ class BluetoothServicesActivity : AppCompatActivity() {
             return
         }
 
-        handler = Handler(Looper.getMainLooper())
-        sharedPref = getSharedPreferences("CarLocation", Context.MODE_PRIVATE)
+        sharedPref = getSharedPreferences("Authentication", Context.MODE_PRIVATE)
 
         updateUIState("Waiting for connection...")
+
+        // Initialize last known location if not already set
+        if (!sharedPref.contains("latitude") || !sharedPref.contains("longitude")) {
+            with(sharedPref.edit()) {
+                putString("latitude", "33.590571")
+                putString("longitude", "73.087681")
+                apply()
+            }
+        }
 
         if (checkPermissions()) {
             connectToDevice()
@@ -82,7 +112,37 @@ class BluetoothServicesActivity : AppCompatActivity() {
         btnEngine = findViewById(R.id.btnEngineAccess)
         btnLocation = findViewById(R.id.btnLocation)
         tvBluetoothStatus = findViewById(R.id.tvBluetoothStatus)
-        setupControls() // This line was missing, adding it to set up button listeners.
+        setupControls()
+    }
+
+    private fun setupBiometricPrompt() {
+        val executor = ContextCompat.getMainExecutor(this)
+        biometricPrompt = BiometricPrompt(this, executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    toggleEngineState()
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    Toast.makeText(this@BluetoothServicesActivity, "Authentication failed. Falling back to PIN.", Toast.LENGTH_SHORT).show()
+                    showPinDialog()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    // Fall back to PIN dialog if an error occurs or the user cancels.
+                    Toast.makeText(this@BluetoothServicesActivity, "Authentication error: $errString", Toast.LENGTH_SHORT).show()
+                    showPinDialog()
+                }
+            })
+
+        promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Vehicle Control Authentication")
+            .setSubtitle("Authenticate to control your vehicle's ignition.")
+            .setNegativeButtonText("Use PIN instead")
+            .build()
     }
 
     // 🔹 Updates status TextView with connection/command info
@@ -164,7 +224,6 @@ class BluetoothServicesActivity : AppCompatActivity() {
                 runOnUiThread {
                     updateUIState("✅ Connected to ${device.name}")
                     startListeningForMessages()
-                    setupControls()
                     sendCommand(COMMAND_OFF)
                 }
 
@@ -220,53 +279,88 @@ class BluetoothServicesActivity : AppCompatActivity() {
 
     private fun setupControls() {
         btnEngine.setOnClickListener {
-            authenticateAndToggleEngine()
+            // Determine the command and store it before authentication
+            commandToSend = if (isUnlocked) COMMAND_OFF else COMMAND_ON
+            checkAuthenticationAndProceed()
         }
         btnLocation.setOnClickListener {
             if (sendCommand(COMMAND_LOCATION)) {
                 updateUIState("Requesting location...")
-                handler.postDelayed({ openMapWithLocation() }, 2000)
+                Handler(Looper.getMainLooper()).postDelayed({ openMapWithLocation() }, 2000)
             }
         }
     }
 
-    // 🔹 Fingerprint Authentication for Engine Start
-    private fun authenticateAndToggleEngine() {
-        val biometricManager = BiometricManager.from(this)
-        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS) {
-            val biometricPrompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this),
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        super.onAuthenticationSucceeded(result)
-                        toggleEngineState()
-                    }
+    private fun checkAuthenticationAndProceed() {
+        val pinHash = sharedPref.getString("user_pin_hash", null)
+        val isBiometricEnabled = sharedPref.getBoolean("fingerprint_enabled", false)
 
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        Toast.makeText(applicationContext, "Auth error: $errString", Toast.LENGTH_SHORT).show()
-                    }
-
-                    override fun onAuthenticationFailed() {
-                        Toast.makeText(applicationContext, "Auth failed", Toast.LENGTH_SHORT).show()
-                    }
-                })
-
-            val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Verify Identity")
-                .setSubtitle("Fingerprint required to start engine")
-                .setNegativeButtonText("Cancel")
-                .build()
-
+        if (isBiometricEnabled && BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS) {
             biometricPrompt.authenticate(promptInfo)
+        } else if (pinHash != null) {
+            showPinDialog()
         } else {
-            // fallback: toggle without fingerprint if unavailable
-            toggleEngineState()
+            // If local storage is empty, try to get PIN from Firebase
+            loadPinFromFirebase { firebasePinHash ->
+                if (firebasePinHash != null) {
+                    showPinDialog()
+                } else {
+                    showAlertDialog("No Security Setup", "Please set up a PIN or fingerprint in Settings to control the vehicle.")
+                }
+            }
         }
+    }
+
+    private fun showPinDialog() {
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        input.hint = "Enter your PIN"
+
+        AlertDialog.Builder(this)
+            .setTitle("Enter PIN")
+            .setView(input)
+            .setPositiveButton("Verify") { _, _ ->
+                val enteredPin = input.text.toString().trim()
+
+                // First check local storage
+                val localPinHash = sharedPref.getString("user_pin_hash", null)
+                if (localPinHash != null && hashPin(enteredPin) == localPinHash) {
+                    toggleEngineState()
+                    Toast.makeText(this, "PIN verified.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                // If local verification fails, check Firebase
+                loadPinFromFirebase { firebasePinHash ->
+                    if (firebasePinHash != null && hashPin(enteredPin) == firebasePinHash) {
+                        // Save to local storage for future offline access
+                        with(sharedPref.edit()) {
+                            putString("user_pin_hash", firebasePinHash)
+                            apply()
+                        }
+                        toggleEngineState()
+                        Toast.makeText(this, "PIN verified (from cloud).", Toast.LENGTH_SHORT).show()
+                    } else {
+                        showAlertDialog("Incorrect PIN", "The PIN you entered is incorrect. Please try again.")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun hashPin(pin: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashedBytes = digest.digest(pin.toByteArray(StandardCharsets.UTF_8))
+        return hashedBytes.joinToString("") { "%02x".format(it) }
     }
 
     private fun toggleEngineState() {
         val command = if (isUnlocked) COMMAND_OFF else COMMAND_ON
         if (sendCommand(command)) {
-            Toast.makeText(this, "Command sent: ${if (isUnlocked) "OFF" else "ON"}", Toast.LENGTH_SHORT).show()
+            isUnlocked = !isUnlocked
+            updateUIState()
+            Toast.makeText(this, "Command sent: ${if (isUnlocked) "ON" else "OFF"}", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Failed to send command", Toast.LENGTH_SHORT).show()
         }
@@ -296,7 +390,7 @@ class BluetoothServicesActivity : AppCompatActivity() {
                     putString("longitude", longitude.toString())
                     apply()
                 }
-                Log.d("BluetoothServices", "Stored location: $latitude, $longitude")
+                Log.d("BluetoothServices", "Stored oo: $latitude, $longitude")
             }
         } catch (e: Exception) {
             Log.e("BluetoothServices", "Error parsing location", e)
@@ -313,13 +407,18 @@ class BluetoothServicesActivity : AppCompatActivity() {
                 putExtra("latitude", latitudeStr.toDouble())
                 putExtra("longitude", longitudeStr.toDouble())
             } else {
-                // This is the fallback block
-                putExtra("latitude", 33.59102)
-                putExtra("longitude", 73.08789)
-                Toast.makeText(this@BluetoothServicesActivity, "Showing Last Known Location - no GPS fix yet", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@BluetoothServicesActivity, "No location data available.", Toast.LENGTH_SHORT).show()
             }
         }
         startActivity(intent)
+    }
+
+    private fun showAlertDialog(title: String, message: String) {
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun hasRequiredPermissions(): Boolean {
@@ -342,5 +441,20 @@ class BluetoothServicesActivity : AppCompatActivity() {
         } catch (e: IOException) {
             Log.e("BluetoothServices", "Error closing connection", e)
         }
+    }
+
+    // Function to load PIN from Firebase
+    private fun loadPinFromFirebase(callback: (String?) -> Unit) {
+        val userId = auth.currentUser?.uid ?: return callback(null)
+        val docRef = db.collection("users").document(userId).collection("security").document("pin")
+        docRef.get()
+            .addOnSuccessListener { document ->
+                val pinHash = document.getString("pin_hash")
+                callback(pinHash)
+            }
+            .addOnFailureListener {
+                Log.e("Firebase", "Failed to get PIN from Firebase", it)
+                callback(null)
+            }
     }
 }

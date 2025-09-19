@@ -56,7 +56,6 @@
         android:layout_height="60dp"
         android:layout_marginTop="24dp"
         android:text="Locate Your Vehicle"
-        android:drawableLeft="@drawable/ic_location"
         android:contentDescription="Location Access Button" />
 
 </LinearLayout>

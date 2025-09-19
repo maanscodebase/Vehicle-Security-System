@@ -3,9 +3,10 @@
     <string name="already_have_account">Already have an account? Login</string>
     <string name="title_activity_login">Login</string>
     <string name="app_name">Vehicle Security System</string>
+    <string name="app_id">smart-car-security-33f7a</string>
     <string name="app_logo_desc">App Logo</string>
     <string name="app_logo_description">App Logo</string>
-    <string name="hint_email">Email (@gmail.com)</string>
+    <string name="hint_email">Email (example@domain.com)</string>
     <string name="hint_phone">Phone</string>
     <string name="toggle_password_description">Toggle Password Visibility</string>
     <string name="hint_password">Password</string>

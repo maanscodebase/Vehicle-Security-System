@@ -15,25 +15,16 @@ class SplashActivity : AppCompatActivity() {
         // Show splash screen for 3 seconds
         Handler(Looper.getMainLooper()).postDelayed({
             val auth = FirebaseAuth.getInstance()
-            val user = auth.currentUser
 
-            if (user != null) {
-                user.reload().addOnSuccessListener {
-                    if (user.isEmailVerified) {
-                        // 🚀 Go directly to Main if already logged in & verified
-                        startActivity(Intent(this, MainActivity::class.java))
-                    } else {
-                        // 🚪 Not verified → send to Login
-                        auth.signOut()
-                        startActivity(Intent(this, LoginActivity::class.java))
-                    }
-                    finish()
-                }
+            // Check if the user is logged in locally, without needing an internet connection.
+            if (auth.currentUser != null) {
+                // User is already logged in, go to Main
+                startActivity(Intent(this, MainActivity::class.java))
             } else {
-                // No user → go to Login
+                // No user found, go to Login
                 startActivity(Intent(this, LoginActivity::class.java))
-                finish()
             }
+            finish()
         }, 3000)
     }
 }
