@@ -63,7 +63,6 @@ void setup() {
 void loop() {
   sim800l.listen(); 
 
-  // Handle Bluetooth commands
   if (Serial.available()) {
     char cmd = Serial.read();
 
@@ -80,7 +79,6 @@ void loop() {
     }
   }
 
-  // Handle GPS data
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
   }
