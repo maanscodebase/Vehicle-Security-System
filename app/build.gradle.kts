@@ -50,7 +50,6 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx:22.3.0") // Check for latest version
     implementation("com.google.firebase:firebase-firestore-ktx:24.9.1")
     implementation("com.google.android.gms:play-services-maps:18.2.0")
-// Check for latest version
 
 
 
